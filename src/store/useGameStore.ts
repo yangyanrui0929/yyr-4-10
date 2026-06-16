@@ -43,6 +43,7 @@ interface GameActions {
 
   startWave: () => void;
   togglePause: () => void;
+  toggleShowRecommendedCells: () => void;
 
   addEnemy: (enemy: Omit<Enemy, "id">) => void;
   updateEnemy: (id: string, updates: Partial<Enemy>) => void;
@@ -88,6 +89,7 @@ const createInitialState = (): GameState => {
       gridPath: GRID_PATH,
       isPaused: false,
       gameOver: false,
+      showRecommendedCells: false,
     };
   }
 
@@ -114,6 +116,7 @@ const createInitialState = (): GameState => {
     gridPath: GRID_PATH,
     isPaused: false,
     gameOver: false,
+    showRecommendedCells: false,
   };
 };
 
@@ -144,6 +147,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       selectedTowerId: null,
       isPaused: false,
       gameOver: false,
+      showRecommendedCells: false,
     });
   },
 
@@ -373,6 +377,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   startWave: () => set({ waveInProgress: true }),
 
   togglePause: () => set((s) => ({ isPaused: !s.isPaused })),
+
+  toggleShowRecommendedCells: () =>
+    set((s) => ({ showRecommendedCells: !s.showRecommendedCells })),
 
   addEnemy: (enemy) =>
     set((s) => ({

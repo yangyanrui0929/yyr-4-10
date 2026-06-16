@@ -8,12 +8,169 @@ import {
   TOWER_CONFIGS,
   ENEMY_CONFIGS,
 } from "@/game/config";
-import type { Enemy, Bullet, Tower, FloatingText } from "@/types/game";
+import type { Enemy, Bullet, Tower, FloatingText, TowerType } from "@/types/game";
 
 function distance(x1: number, y1: number, x2: number, y2: number) {
   const dx = x2 - x1;
   const dy = y2 - y1;
   return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getPathCellsSet(gridPath: { x: number; y: number }[]) {
+  const pathCells: Set<string> = new Set();
+  for (let i = 0; i < gridPath.length - 1; i++) {
+    const a = gridPath[i];
+    const b = gridPath[i + 1];
+    if (a.x === b.x) {
+      const [s, e] = a.y < b.y ? [a.y, b.y] : [b.y, a.y];
+      for (let y = s; y <= e; y++) pathCells.add(`${a.x},${y}`);
+    } else {
+      const [s, e] = a.x < b.x ? [a.x, b.x] : [b.x, a.x];
+      for (let x = s; x <= e; x++) pathCells.add(`${x},${a.y}`);
+    }
+  }
+  return pathCells;
+}
+
+function getPathCorners(gridPath: { x: number; y: number }[]) {
+  const corners: { x: number; y: number }[] = [];
+  for (let i = 1; i < gridPath.length - 1; i++) {
+    const prev = gridPath[i - 1];
+    const curr = gridPath[i];
+    const next = gridPath[i + 1];
+    const dir1X = curr.x - prev.x;
+    const dir1Y = curr.y - prev.y;
+    const dir2X = next.x - curr.x;
+    const dir2Y = next.y - curr.y;
+    if (dir1X * dir2X + dir1Y * dir2Y === 0) {
+      corners.push({ x: curr.x, y: curr.y });
+    }
+  }
+  return corners;
+}
+
+function distToPath(gx: number, gy: number, gridPath: { x: number; y: number }[]) {
+  let minDist = Infinity;
+  for (let i = 0; i < gridPath.length - 1; i++) {
+    const a = gridPath[i];
+    const b = gridPath[i + 1];
+    if (a.x === b.x) {
+      const [s, e] = a.y < b.y ? [a.y, b.y] : [b.y, a.y];
+      const dy = Math.max(0, Math.max(s - gy, gy - e));
+      const d = Math.sqrt(Math.pow(gx - a.x, 2) + dy * dy);
+      if (d < minDist) minDist = d;
+    } else {
+      const [s, e] = a.x < b.x ? [a.x, b.x] : [b.x, a.x];
+      const dx = Math.max(0, Math.max(s - gx, gx - e));
+      const d = Math.sqrt(dx * dx + Math.pow(gy - a.y, 2));
+      if (d < minDist) minDist = d;
+    }
+  }
+  return minDist;
+}
+
+function distToNearestCorner(gx: number, gy: number, corners: { x: number; y: number }[]) {
+  let minDist = Infinity;
+  for (const c of corners) {
+    const d = distance(gx, gy, c.x, c.y);
+    if (d < minDist) minDist = d;
+  }
+  return minDist;
+}
+
+function towerCoverageOverlap(
+  gx: number,
+  gy: number,
+  towerType: TowerType,
+  towers: Tower[]
+) {
+  const cfg = TOWER_CONFIGS[towerType];
+  const rangeCells = cfg.range / CELL_SIZE;
+  let overlapScore = 0;
+  for (const t of towers) {
+    const d = distance(gx, gy, t.gridX, t.gridY);
+    const tCfg = TOWER_CONFIGS[t.type];
+    const tRangeCells = tCfg.range / CELL_SIZE;
+    const overlap = rangeCells + tRangeCells - d;
+    if (overlap > 0) {
+      overlapScore += overlap / (rangeCells + tRangeCells);
+    }
+  }
+  return overlapScore;
+}
+
+export function getRecommendedCells(
+  towerType: TowerType,
+  gridPath: { x: number; y: number }[],
+  towers: Tower[]
+): Map<string, "recommended" | "normal" | "blocked"> {
+  const result = new Map<string, "recommended" | "normal" | "blocked">();
+  const pathCells = getPathCellsSet(gridPath);
+  const corners = getPathCorners(gridPath);
+  const occupiedCells = new Set(towers.map((t) => `${t.gridX},${t.gridY}`));
+
+  const scores: Map<string, number> = new Map();
+  let maxScore = -Infinity;
+  let minScore = Infinity;
+
+  for (let gx = 0; gx < GRID_COLS; gx++) {
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      const key = `${gx},${gy}`;
+      if (pathCells.has(key) || occupiedCells.has(key)) {
+        result.set(key, "blocked");
+        continue;
+      }
+
+      const distPath = distToPath(gx, gy, gridPath);
+      const distCorner = distToNearestCorner(gx, gy, corners);
+      const overlap = towerCoverageOverlap(gx, gy, towerType, towers);
+      const cfg = TOWER_CONFIGS[towerType];
+      const maxRangeCells = cfg.range / CELL_SIZE;
+
+      let score = 0;
+
+      if (distPath <= maxRangeCells) {
+        score += (1 - distPath / maxRangeCells) * 40;
+      }
+
+      if (distCorner <= maxRangeCells) {
+        const cornerBonus =
+          towerType === "chili" ? 35 : towerType === "spatula" ? 25 : 20;
+        score += (1 - distCorner / maxRangeCells) * cornerBonus;
+      }
+
+      if (overlap > 0) {
+        const overlapPenalty =
+          towerType === "freezer" ? 5 : towerType === "spatula" ? 15 : 25;
+        score -= overlap * overlapPenalty;
+      }
+
+      if (towerType === "chili") {
+        if (distCorner <= 1.5) score += 15;
+      } else if (towerType === "freezer") {
+        if (distPath <= 1.2 && distPath >= 0.5) score += 10;
+      } else {
+        if (distPath <= 1.5) score += 8;
+      }
+
+      scores.set(key, score);
+      if (score > maxScore) maxScore = score;
+      if (score < minScore) minScore = score;
+      result.set(key, "normal");
+    }
+  }
+
+  const range = maxScore - minScore;
+  if (range > 0) {
+    for (const [key, score] of scores) {
+      const normalized = (score - minScore) / range;
+      if (normalized >= 0.7) {
+        result.set(key, "recommended");
+      }
+    }
+  }
+
+  return result;
 }
 
 export function gameTick(now: number) {
@@ -317,6 +474,18 @@ export function drawBattlefield(
     }
   }
 
+  const showRecommend =
+    state.showRecommendedCells && state.selectedTowerType !== null;
+  let recommendedMap: Map<string, "recommended" | "normal" | "blocked"> | null =
+    null;
+  if (showRecommend && state.selectedTowerType) {
+    recommendedMap = getRecommendedCells(
+      state.selectedTowerType,
+      state.gridPath,
+      state.towers
+    );
+  }
+
   for (let gx = 0; gx < GRID_COLS; gx++) {
     for (let gy = 0; gy < GRID_ROWS; gy++) {
       const x = gx * CELL_SIZE;
@@ -341,6 +510,20 @@ export function drawBattlefield(
       } else {
         ctx.fillStyle = (gx + gy) % 2 === 0 ? "#FFF3E0" : "#FFE0B2";
         ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+      }
+
+      if (showRecommend && recommendedMap) {
+        const status = recommendedMap.get(`${gx},${gy}`);
+        if (status === "recommended") {
+          ctx.fillStyle = "rgba(34,197,94,0.35)";
+          ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+        } else if (status === "blocked" && !isPath) {
+          ctx.fillStyle = "rgba(239,68,68,0.25)";
+          ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+        } else if (status === "normal") {
+          ctx.fillStyle = "rgba(156,163,175,0.15)";
+          ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+        }
       }
 
       ctx.strokeStyle = "rgba(139,69,19,0.1)";

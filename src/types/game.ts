@@ -113,4 +113,5 @@ export interface GameState {
   gridPath: { x: number; y: number }[];
   isPaused: boolean;
   gameOver: boolean;
+  showRecommendedCells: boolean;
 }

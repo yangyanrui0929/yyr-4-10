@@ -4,7 +4,7 @@ import type { TowerType } from "@/types/game";
 import Card from "@/components/common/Card";
 
 export default function TowerSelect() {
-  const { selectedTowerType, selectTowerType, gold } = useGameStore();
+  const { selectedTowerType, selectTowerType, gold, showRecommendedCells, toggleShowRecommendedCells } = useGameStore();
 
   const towers: TowerType[] = ["spatula", "chili", "freezer"];
 
@@ -59,6 +59,51 @@ export default function TowerSelect() {
           💡 已选择 <b>{TOWER_CONFIGS[selectedTowerType].name}</b>，点击战场空地放置！
         </div>
       )}
+
+      <div className="mt-4">
+        <button
+          onClick={toggleShowRecommendedCells}
+          className={`w-full flex items-center justify-between p-3 rounded-lg border-2 transition-all ${
+            showRecommendedCells
+              ? "border-green-500 bg-green-50 shadow-md"
+              : "border-gray-200 bg-white hover:border-green-300"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xl">💡</span>
+            <span className={`font-bold ${showRecommendedCells ? "text-green-700" : "text-gray-700"}`}>
+              推荐塔位
+            </span>
+          </div>
+          <div
+            className={`w-10 h-6 rounded-full transition-colors relative ${
+              showRecommendedCells ? "bg-green-500" : "bg-gray-300"
+            }`}
+          >
+            <div
+              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow ${
+                showRecommendedCells ? "left-[18px]" : "left-0.5"
+              }`}
+            />
+          </div>
+        </button>
+        {showRecommendedCells && (
+          <div className="mt-2 text-xs space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-4 h-4 rounded" style={{ background: "rgba(34,197,94,0.5)" }}></span>
+              <span className="text-green-700">推荐放置</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-4 h-4 rounded" style={{ background: "rgba(156,163,175,0.3)" }}></span>
+              <span className="text-gray-600">可以放置</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-4 h-4 rounded" style={{ background: "rgba(239,68,68,0.4)" }}></span>
+              <span className="text-red-600">不可放置</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="mt-3 text-xs text-gray-500">
         提示：再次点击塔可以取消选择
